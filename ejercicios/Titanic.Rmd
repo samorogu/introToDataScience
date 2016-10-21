@@ -1,0 +1,187 @@
+---
+title: "Titanic"
+output: 
+    html_notebook:
+        fig_width: 13
+        number_sections: yes
+        toc: yes
+        toc_depth: 2
+---
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+instalar <- function(paquete) {
+
+    if (!require(paquete,character.only = TRUE, quietly = TRUE, warn.conflicts = FALSE)) {
+        install.packages(as.character(paquete), dependecies = TRUE, repos = "http://cran.us.r-project.org")
+        library(paquete, character.only = TRUE, quietly = TRUE, warn.conflicts = FALSE)
+    }
+}
+
+paquetes <- c('lubridate', 'magrittr', 'ggvis', 'dplyr', 'tidyr', 'readr', 'rvest', 
+              'ggplot2', 'stringr', 'ggthemes', 'googleVis', 'shiny', 'tibble', 'vcd', 'vcdExtra',
+              'GGally', 'readODS', 'readxl', "RSQLite")
+
+lapply(paquetes, instalar);
+```
+
+
+# Titanic
+
+![Titanic](../data/Titanic/images/titanic.jpg)
+
+## Cargando los datos
+
+
+```{r}
+rm(list=ls())
+
+rds_files <- dir("../data/Titanic/", pattern = "*.rds", full.names = TRUE)
+
+ds <- lapply(rds_files, read_rds)
+
+names(ds) <- lapply(rds_files, basename)
+```
+
+## Preguntas a resolver
+
+- En algunos *data sets* se agregaron columnas de más, remuévelas
+- Crea un método para unificar los *data sets* en uno solo.
+
+
+Podemos ver lso diferentes tipos de columnas que tenemos en esta lista de `data.frames`
+
+```{r}
+unique(lapply(ds, names))
+```
+
+Vemos que tenemos 4 listas diferentes. Hay dos conjuntos con dos columnas de más y está el caso
+raro de que existe uno que no tiene columnas. Investiguemos un poco más
+
+```{r}
+print(lapply(ds, head))
+```
+
+Podemos ver que el `data.frame` sin columnas es aquel con la tripulación que no subió al barco (`discharged_crew.rds`)
+
+
+```{r, echo=TRUE}
+ds <- ds[-which(lapply(lapply(ds, names), length) == 2)]
+```
+
+Por último unimos todos los `data.frames` en uno solo y removemos las columnas espúreas
+
+```{r}
+
+num_cols <- min(unlist(lapply(lapply(ds, names), length)))
+
+
+titanic <- dplyr::bind_rows(ds) %>%
+                dplyr::select(1:num_cols) 
+
+names(titanic) <- c('Name', 'Age', 'Class', 'Ticket', 'Fare', 'Group', 'Ship', 'Joined', 'Job', 'Boat', 'Body')
+```
+
+```{r}
+titanic <- dplyr::tbl_df(titanic)
+titanic
+```
+
+- Genera las siguientes variables: `survived`, `name`, `last_name`, `sex`
+- Arregla la columna de precio, edad
+
+
+```{r warning=FALSE}
+titanic <- titanic %>% 
+    tidyr::separate(Name, into=c("last_name", "name"), sep = ",", extra="drop") %>%
+    tidyr::separate(Fare, into=c("pounds", "schillings", "pence"), sep = " ", extra="drop") %>%
+    dplyr::mutate(sex = ifelse(grepl('Miss|Mrs|Mme.|Lady|Doña|Ms', name), 'F',  
+                               ifelse(grepl('Mr|Sir|Sig|Dr|Master|Captain|Major|Rev.|Colonel|Fr|Don.', name), 'M', NA))) %>%
+    dplyr::mutate(boat_location = ifelse(as.integer(Boat) %in% c(9:16), 'Popa', 
+                                         ifelse(as.integer(Boat) %in% c(LETTERS[1:4], 1:8), 'Proa', NA))) %>%
+    tidyr::separate(Age, into=c("age", "units"), sep=2, extra="drop") %>%
+    dplyr::mutate(age=ifelse(units == 'm', 1, as.integer(age))) %>%  
+    dplyr::mutate(survived = !is.na(Boat)) %>%
+    dplyr::select(-c(schillings, pence, Body, units)) %>%
+    dplyr::mutate(pounds = as.integer(str_replace(pounds, '£', ''))) %>%
+    dplyr::mutate(Class=as.factor(Class), Group=as.factor(Group), 
+                  Ship=as.factor(Ship), Joined=as.factor(Joined), Job=as.factor(Job), Boat=as.factor(Boat),
+                  sex = as.factor(sex), boat_location = as.factor(boat_location))
+```
+
+
+```{r}
+summary(titanic)
+```
+
+
+
+- Agrega una columna de `age` que sea categórica
+
+Definiremos tres categorías: `infante` si es menor de 18 años, `adulto` entre 18 y 65
+y `adulto mayor` si es mayor a 65
+
+```{r}
+titanic <- titanic %>%
+    mutate(age = ifelse(age <= 18, 'infante', ifelse(age >= 65, 'adulto mayor', 'adulto')))
+```
+
+
+- Ajusta a precios del día de hoy (Por ejemplo usa esta [página](http://inflation.stephenmorley.org/))¿En que clase hubieras viajado? ¿Cuál era tu probilidad de supervivencia?
+
+
+```{r}
+ggplot(titanic, aes(pounds)) + 
+    geom_histogram(binwidth = 30)
+```
+
+```{r}
+titanic <- titanic %>% 
+    group_by(Ticket) %>% 
+    mutate(pounds_per_ticket = round(pounds/n())) %>% ungroup()
+titanic
+```
+
+```{r}
+titanic %>% filter(Class %in% c('1st Class', '2nd Class', '3rd Class')) %>%
+ggplot(aes(pounds_per_ticket)) + 
+    geom_histogram(binwidth = 10) + facet_grid(~Class)
+```
+
+
+Aproximadamente 10 libras de 1912 son 1,060 libras actuales, 50 libras son 5,300 y 100 libras son 10,600 libras al 2016.
+
+
+- Observando la distribución de botes que se muestra en la figura ¿Qué puedes decir sobre como se utilizaron?
+  ¿Coincide con la película de Titanic de James Cameron?
+
+```{r}
+titanic %>% 
+    group_by(boat_location) %>% 
+    dplyr::summarise(n=n())
+```
+
+Mmmm, no nos dice mucho de esta manera
+
+
+```{r}
+titanic %>%
+    group_by(Boat) %>%
+    dplyr::summarise(n=n()) %>%
+    arrange(desc(n))
+```
+
+En realidad, esto no muestra de qué manera se hunidó el Titanic.
+
+Los botes del 1 al 16 tenian una capacidad de 65 personas,  los botes del A al D tenían una capacidad de 45 personas.
+([Fuente](https://en.wikipedia.org/wiki/RMS_Titanic)).
+
+
+
+## Fuente de los datos:
+[Encyclopedia Titanica](https://www.encyclopedia-titanica.org/titanic-passenger-list/)
+
+## ¿Cómo manejar listas en `R`?
+
+![Fuente: Posiblemente alguna presentación de Hadley Wickham](../images/HadleyWickham_index_list.png)
+
+

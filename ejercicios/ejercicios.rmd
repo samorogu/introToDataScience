@@ -1,0 +1,564 @@
+---
+title: "Ejercicios: R Notebook"
+output: html_notebook
+---
+
+
+```{r, message=FALSE, warning=FALSE, include=FALSE}
+rm(list = ls())
+
+instalar <- function(paquete) {
+
+    if (!require(paquete,character.only = TRUE, quietly = TRUE, warn.conflicts = FALSE)) {
+        install.packages(as.character(paquete), dependecies = TRUE, repos = "http://cran.us.r-project.org")
+        library(paquete, character.only = TRUE, quietly = TRUE, warn.conflicts = FALSE)
+    }
+}
+
+paquetes <- c('lubridate', 'magrittr', 'ggvis', 'dplyr', 'tidyr', 'readr', 'rvest', 
+              'ggplot2', 'stringr', 'ggthemes', 'googleVis', 'shiny', 'tibble', 'vcd', 'vcdExtra',
+              'GGally')
+
+lapply(paquetes, instalar);
+
+theme_set(theme_bw())
+theme_update(strip.background = element_blank())
+```
+
+<br>
+
+### I. Exploratory Data Analysis
+
+<br>
+
+#### 1. Ejercicio:
+
+**1.** Grafica `medv` usando `boxplot`, `stripchart` (*jittered dotplot*), 
+`stem`, `density` estimate con  `rug` plot
+
+En las gráficas se describe la distribución de la variable de 
+valor medio de las casas ocupadas por sus propios dueños. 
+
+La primera gráfica muestra los cuartiles de la variable. 
+La mediana está alrededor de 20 y el rango 
+inter-cuartílico entre 17 y 25 mil dólares.
+
+En la segunda gráfica, de nuevo, se observa la distribución de 
+la variable pero en particular se observa la moda 
+de las observaciones alrededor de 21 mil dólares y 
+sesgo a la derecha con mayor densidad al rededor de 
+los 50 mil dólares. 
+
+```{r, fig.height=4.2, fig.width=12}
+par(mfrow=c(1,2))
+boxplot(MASS::Boston$medv, main = "Boxplot", horizontal = T)
+stripchart(MASS::Boston$medv, add = T, method = 'jitter', 
+           col = 'blue', cex = .4, jitter = .05)
+plot(density(MASS::Boston$medv), main = "Density Plot")
+rug(MASS::Boston$medv, col = 'blue')
+```
+
+En el diagrama siguiente se observan las unidades 
+de la variable. Se puede observar que entre 18 y 22 
+es lo más denso de la distribución. La moda esta en 22 mil dólares, 
+el valor mínimo es 4 mil y el máximo de 50 mil con varias 
+observaciones en el número. Esto resulta extraño y puede ser que 
+la gente redondea o da como máximo este valor. 
+
+```{r}
+stem(MASS::Boston$medv)
+```
+
+
+
+**2.** En la gráfica de las 14 variables mostrada arriba ¿Cómo describirías las distribuciones? 
+  ¿Para cuales variables sería mejor utilizar `boxplot`? ¿Por qué?
+
+La forma de describir las variables es con un boxplot, pero esto funciona únicamente 
+para las variables numéricas continúas. 
+
+```{r, fig.width=10, fig.height=6}
+boston.l <- MASS::Boston %>%
+    mutate(id = rownames(.)) %>%
+    gather(var.name, var.value, -id)
+ggplot(boston.l, aes(x = var.name, y = var.value)) +
+    geom_boxplot() +
+    facet_wrap(~var.name, 
+               scales = 'free', nrow = 2) + 
+    xlab(NULL) + 
+    ylab(NULL) + 
+    theme(axis.text.x=element_blank(),
+        axis.ticks.x=element_blank()) + 
+    ggtitle('Boxplot de Variables en DF')
+```
+
+
+Si se observan los digramas boxplot para cada variable, hay 
+dos casos en los que no se observa un resúmen que 
+muestre la variabilidad: `chas` y `rad`.
+En estas variables se puede ver que la caja es muy amplia o 
+muy aplastada, lo que se interpreta como valores con muy poca
+variabilidad. 
+ 
+Si obtenemos la abla de frecuencias de la variable chas, se puede observar que 
+sólo tiene dos valores: `0` y `1`. El diagrama de caja y brazos
+en este caso solo concentra la distribución de la variable en 
+dos puntos, por lo tanto no resulta informativa. Los cuartiles de la variable 
+no son relevantes en este caso. 
+
+En este caso, para observar la distribución de la variable
+es mejor usar algo como una tabla de frecuencias o 
+una gráfica de barras.
+
+```{r, fig.height=3.5, fig.width=3.5}
+ggplot(data = MASS::Boston, aes(x = factor(chas))) +
+    geom_bar(stat = 'count') + 
+    ylab('frecuencia') + 
+    xlab('orilla del río')
+```
+
+De forma similar la variable `rad` únicamente tiene 
+8 valores y un 24, que aunque es numérico 
+representa categorías y por lo tanto los cuartiles 
+de la variable no resultan relevantes. 
+
+```{r, fig.height=4, fig.width=6}
+ggplot(data = MASS::Boston, aes(x = factor(rad))) +
+    geom_bar(stat = 'count') + 
+    ylab('frecuencia') + 
+    xlab('índice de acceso\nautopistas')
+```
+
+
+<br>
+
+#### 2. Ejercicio:
+
+**1.** ¿Qué puedes decir de esta gráfica?
+
+La distribución de la duración de las películas 
+es bimodal, alrededor de 10 minutos y 
+95 minutos. 
+
+
+**2.** ¿Cómo la modificas para agregar más *ticks*? Cada 5
+
+Una forma de modificarla es con la función `scale_x_continous()`
+con una 
+
+```{r, fig.height=3, fig.width=8.5}
+movies.df <- ggplot2movies::movies
+ggplot( movies.df, 
+       aes(x=length)) + 
+    geom_histogram(binwidth = 1) +
+    xlab("Duración de películas en minutos") + 
+    ylab("")  + 
+    scale_x_continuous(breaks = seq(0, 180, by = 5), 
+                       limits = c(0,180)) + 
+    theme(axis.text.x = element_text(size = 7))
+```
+
+
+**3.** Haz una gráfica que muestre que los picos a los 7 y 90 
+minutos existían **antes y después de 1980**. (identity)
+
+```{r, fig.height=4, fig.width=8.5}
+movies.df %<>% 
+    mutate(antes1980 = factor(
+        ifelse(year <1980, "antes de 1980", "después de 1980"))
+    )
+ggplot( movies.df, 
+       aes(x=length, fill= antes1980)) + 
+    geom_histogram(binwidth = 1, 
+                   position = 'identity', 
+                   alpha = .5) +
+    xlab("Duración de películas en minutos") + 
+    ylab("")  + 
+    scale_x_continuous(breaks = seq(0, 180, by = 5), 
+                       limits = c(0,180)) + 
+    theme(axis.text.x = element_text(size = 7), 
+          legend.position = 'bottom')
+```
+
+
+
+**4.** Existe la variable `Short` que indica si la película es "corta" 
+¿Qué gráfica puedes hacer para
+ver que criterio se utilizó para definir esta 
+variable y cuáles están mal clasificadas?
+
+Se crea una gráfica de densidad, similar a un histograma 
+pero con frecuencia relativa, se puede ver que el punto donde 
+se cruzan las dos distribuciones es al rededor de 45 minutos, este
+podría ser un posible punto de corte. 
+
+```{r, fig.width=9, fig.height=4}
+tab <- movies.df %>% 
+    filter(length < 300)
+ggplot(tab, aes(x = length, fill = factor(Short))) + 
+    # geom_histogram(binwidth = 3, position = 'identity') +
+    geom_vline(xintercept = 45, alpha = .5) +
+    geom_density() + 
+    scale_x_continuous(breaks = seq(0, max(tab$length), by = 10)) +
+    theme(axis.text.x = element_text(size = 7), 
+          legend.position = 'bottom') +
+    guides(fill  = guide_legend(title = 'short'))
+```
+
+A continuación se grafica el diagrama boxplot de duración de película para las
+clasificadas como `1`, es decir, *corta*. En este diagrama
+vemos que apartir de los 38 minutos se considera outlier, por lo que 
+la suposición anterior de 45 minutos se confirma. 
+
+
+```{r, fig.height=3, fig.width=9}
+is_outlier <- function(x) {
+  return(x < quantile(x, 0.25) - 1.5 * IQR(x) | x > quantile(x, 0.75) + 1.5 * IQR(x))
+}
+tab <- movies.df %>% 
+    filter(Short == 1) %>%
+    mutate(outlier = ifelse(is_outlier(length), length, as.numeric(NA)),
+           outlier.selec = ifelse(outlier %in% c(seq(38, 240, by = 6), 115,240), 
+                                  outlier, as.numeric(NA) ) )
+ggplot(tab, aes(x = factor(Short), y = length) ) + 
+    geom_boxplot() + 
+    geom_text(aes(label = outlier.selec), na.rm = TRUE, 
+              vjust = -1, size = 3) + 
+    xlab('Short')+ 
+    scale_y_continuous(breaks = seq(0,300, by = 10)) + 
+    theme(axis.text.y = element_blank(),
+          axis.ticks.y = element_blank()) + 
+    coord_flip() 
+```
+
+De forma similar, en la siguiente gráfica se muestra el 
+digrama boxplot de la duración de las películas *no cortas*. 
+En este caso los outliers inferiores son menores a 57 minutos 
+que incluye los 45 minutos de la primera gráfica.
+
+```{r, fig.height=3, fig.width=9}
+tab <- movies.df %>% 
+    filter(Short == 0, length < 500) %>%
+    mutate(outlier = ifelse(is_outlier(length), length, as.numeric(NA)),
+           outlier.selec = ifelse(outlier %in% c(seq(0, 60, by = 15), 57),
+                                  outlier, as.numeric(NA) ) )
+ggplot(tab, aes(x = factor(Short), y = length) ) + 
+    geom_boxplot() + 
+    geom_text(aes(label = outlier.selec), na.rm = TRUE,
+              vjust = -1, size = 3) +
+    xlab('No short') + 
+    theme(axis.text.y = element_blank(),
+          axis.ticks.y = element_blank()) +
+    coord_flip() 
+```
+
+
+Considerando un corte de 45 minutos o menos la tabla de frecuencia 
+para la nueva variable *corta* se muestra a continuación.
+Existe `r 45 + 43` películas mal clasificadas, representa el 
+`r round(100*(45+43)/nrow(ggplot2movies::movies), 2)`%
+del total de películas.
+
+```{r}
+movies.df %<>% 
+    mutate(short.recode = ifelse(length <=45, 'menos 45', '45 o mas'))
+tt <- table(movies.df$Short, movies.df$short.recode) 
+rownames(tt) <- c('not short', 'short')
+tt
+```
+
+    
+<br>
+
+#### 3. Ejercicio
+
+Podemos continuar con la base de datos `movies`.  
+En particular veamos las variables `rating`,
+la cual representa el promedio de calificaciones en **IMDB** y 
+`votes`, número de personas que calificaron la película.
+
+```{r}
+ggplot(ggplot2movies::movies, aes(votes, rating)) + 
+    geom_point() + ylim(1,10)
+```
+
+**1.** Agrega *alpha-blending* ¿Qué pasa con los  *outliers*? ¿Diferentes valores funcionan mejor?
+
+Alpha blending incluye transparencia en los puntos. 
+Diferentes valores de transparencia o alpha pueden 
+no funcionar si la transparencia no es importante, 
+ya que es muy probable que no se 
+pueda apreciar donde se localizan las regiones
+con mayor o menor densidad. 
+
+Los outliers se observan más claros porque son pocos
+puntos, en este caso, 
+pocas películas tienen arriba de 30 mil 
+personas que votaron, pero la calificación promedio
+tiene menor variabilidad que por ejemplo, 
+la *línea* de puntos cerca del cero número de votantes, 
+donde el rating que dan tiene alta densidad y 
+abarca todo el eje. 
+
+```{r}
+ggplot(ggplot2movies::movies, aes(votes, rating)) + 
+    geom_point(alpha = 0.2) + ylim(1,10) + 
+    scale_x_continuous(breaks = seq(0, max(ggplot2movies::movies$votes)+10e3, 20e3))
+```
+
+**2.** ¿Cómo se ve la gráfica si  remueves las películas con menos de 100 votos?
+
+Al quitar las películas con 
+menos de 100 votantes se mantiene 
+la concentración de películas en el número de votantes más 
+bajo pero con menor dispersión. De hecho, las películas 
+con calificación cercana al 10 son las que menos votos tienen. 
+
+```{r}
+ggplot( filter(ggplot2movies::movies, votes > 100), 
+       aes(votes, rating)) + 
+    geom_point(alpha = 0.2) + ylim(1,10) + 
+    scale_x_continuous(breaks = seq(0, max(ggplot2movies::movies$votes)+10e3, 20e3))
+```
+
+**3.** ¿Cómo si remueves todas las películas que tienen un *rating* arriba de 9?
+
+Las películas con más votos tienen una tendencia 
+a tener calificaciones más altas. 
+
+```{r}
+ggplot( filter(ggplot2movies::movies, rating < 9), 
+       aes(votes, rating)) + 
+    geom_point(alpha = 0.1) + 
+    scale_x_continuous(breaks = seq(0, max(ggplot2movies::movies$votes)+10e3, 20e3))
+```
+
+<br>
+
+#### 4. Ejercicio
+
+Al igual que en el caso univariado, es posible estudiar posibles modelos, como se muestra en el siguiente ejemplo,
+usando el *dataset* `Cars93` del paquete **MASS**:
+
+```{r}
+ggplot(MASS::Cars93, aes(Weight, MPG.city)) + geom_point() +
+    geom_smooth(colour="green") + ylim(0,50)
+```
+
+**1.** ¿Cuál es el *outlier* de la izquierda?
+
+```{r}
+cars.df <- MASS::Cars93 %>% 
+    mutate(label = ifelse(MPG.city >40, 
+                          as.character(Make), " ")
+           )
+ggplot(cars.df, aes(Weight, MPG.city)) + 
+    geom_point() +
+    geom_smooth(colour="green") + 
+    ylim(0,50) +
+    geom_text(aes(label = label), hjust = 0, nudge_x = .5, nudge_y = .5)
+```
+
+**2.** En muchos países en lugar de medirse el desempeño 
+en millas por galón, se mide  en
+litros por 100 km. ¿Qué pasa si graficas `1/MPG.city` 
+contra `Horsepower`? ¿Existe una relación
+lineal? ¿Cuáles son los outliers?
+
+Existe una relación lineal positiva, a mayor caballos 
+de fuerza mayor galones de gasolina. Un dato atípico, 
+es Honda Civic que por el consumo de gasolina que 
+tiene la potencia del motor es mayor. 
+Los autos *van* en general estan por debajo 
+de la relación lineal, gastan mucha gasolina y 
+tienen poca potencia, de hecho, los autos con 
+mayor gasto de gasolina son van. 
+Finalmente los 5 autos con mayor potencia sobresalen por 
+tener menor consumo de gasolina que otros autos. 
+
+```{r fig.height=5}
+cor.v <- cor(1/cars.df$MPG.city, cars.df$Horsepower)
+ggplot(cars.df, aes( x = 1/MPG.city, y = Horsepower) ) + 
+    geom_point( aes(color = Type)) +
+    geom_smooth(method = 'lm') + 
+    geom_text(aes(label = Make), 
+              check_overlap = T,
+              vjust = -1, hjust = .3, 
+              color = 'gray70', size = 3) + 
+    theme(legend.position = 'bottom') + 
+    geom_label(x = .025, y = 280, 
+               label = paste('Corr:', round(cor.v,2)) )
+```
+
+<br>
+
+#### 5. Ejercicio
+
+Al igual que cuando graficamos todas las variables del *dataset* `Boston`, podemos hacer un
+**splom** (*Scatterplot matrix*)
+
+```{r, fig.height=13, fig.width=13}
+MASS::Boston %>%
+    select(-rad,-chas) %>%
+    ggpairs(title="Boston Dataset",
+            diag=list(continuos='density', axisLabels='none'))
+```
+
+**1.** ¿Cuáles están positivamente correlacionadas con `medv`?
+
+Las variables correlacionadas positivamente con 
+el valor medio de los hogares son: 
+`zn` proporción de zona residencial a la redonda, 
+`rm` número de cuartos promedio, 
+`dis` distancia a centros de empleo y 
+`black` proporción de población negra.
+
+**2.** La variable `crim` (tasa de crímenes per cápita) tiene *scatterplots* con forma inusual,
+  donde los valores más altos de `crim` sólo ocurren para una valor de la otra variable
+  ¿Qué explicación le puedes dar?
+  
+**3.** Hay varias formas en los *scatterplots*, escoge 5 y explica como las interpretas?
+
+<br>
+
+#### 6. Ejercicio
+
+*1.* Usando Boston realice una gráfica 'pcp'.
+
+```{r}
+boston.df <- MASS::Boston %>% 
+    dplyr::select(crim, zn, medv)
+gg <- ggparcoord(boston.df, columns = c(1:2), 
+                 alphaLines = 0.5,  scale = "uniminmax",
+                 groupColumn = "medv", boxplot = T)
+gg
+```
+
+
+<br>
+
+#### 7. Ejercicio: Reproducibilidad
+
+En estos casos de estudio nos vamos a encontrar con nuestro primer tipo de 
+*pipeline*, en este caso en particular, este *pipeline* **no** es para ejecutar
+grandes volúmenes de datos o para ejecutar contínuamente, si no para poder
+reproducir el proceso de exploración y modelado de datos.
+
+**•** Crea en tu carpeta las carpetas `german` y `algas`, dentro de ellas crea los archivos 
+`00-load.R`, `01-prepare.R` y `02-clean.R` y `run.R`
+En estos archivos pondrás, respectivamente el código para ejecutar los *pipelines* siguientes de los 
+casos de estudio.
+
+```{r, eval = F, message=FALSE, warning=FALSE}
+german_url <- paste('http://archive.ics.uci.edu/ml',
+                    '/machine-learning-databases/statlog',
+                    '/german/german.data',
+                    sep='')
+german_data <- read_delim(german_url, 
+                          col_names=FALSE, 
+                          delim = " ")
+glimpse(german_data)
+```
+
+**1.** Crea una función `load` en `utils.R` en tu carpeta, que descargue, si y sólo si no existe
+un archivo `german.rds`. Si no existe, descarga y guarda el archivo.
+
+```{r, message=FALSE}
+source("german/utils.R")
+source("german/metadata.R")
+load()
+```
+
+**2.** `?saveRDS`, `?readRDS`
+```{r eval = F}
+# para leer
+write_rds(german_data, "german.rds")
+saveRDS(german_data, "german.rds")
+
+# para esscribir/guardar
+readRDS(german_data, "german.rds")
+read_rds("german.rds")
+```
+
+
+<br>
+ 
+#### 8. Ejercicio: Decodificar
+
+
+**•** Crea una función `german_decode` en un archivo `utils.R` dentro de tu carpeta, 
+esta función debe de utilizar `german_codes` (en el archivo `metadata.R`) para 
+decodificar los elementos de todas las columnas (por ejemplo `A201` -> `yes`)
+(La función recibe la columna y regresa la columna transformada, si el valor de
+sustituir esta dentro del código)
+
+Utiliza `dplyr` para decodificar todas las columnas de `german_data`
+```{r, warning=FALSE}
+german_data <- german_data %>% 
+                     mutate_each(funs(german_decode))
+colnames(german_data) <- german_colnames
+german_data %>% glimpse
+```
+
+<br>
+
+#### 9. Ejercicio: Datos manejables 
+
+En este momento deberás de tener archivos `00-load.R`, `01-prepare.R`, `02-clean.R`,  `metadata.R` 
+y un archivo `utils.R` dentro de `german`.  
+Además deberías de tener un archivo `german.rds`.
+
+**1.** ¿Hay algo raro con los datos de préstamo?
+¿Cuál crees que debería ser la distribución del resultado del 
+  préstamo `Good_Loan` respecto a `Credit history`?
+  
+Espero que la mayoría de  los créditos clasificados 
+como *good_loan* sean con historial crediticio 
+sano, de cumplimiento como esperado.
+
+**2.** Grafícalo y comenta tus resultados.
+ 
+Si se asume que `1` es sí y `2`es no, entonces  
+se tiene 
+
+```{r}
+german_data %>%
+    group_by(`good_loan`) %>% 
+    tally %>% 
+    as.matrix()
+```
+
+  
+```{r fig.height=4, fig.width=6}
+ggplot( german_data, aes(x = `Credit history`,
+                         y = ..prop.., group = 1) ) + 
+    geom_bar() + 
+    xlab(NULL) +
+    coord_flip() 
+```
+
+
+
+```{r }
+ggplot( german_data, aes(x = factor(good_loan), fill = `Credit history`) ) + 
+    geom_bar(position = 'dodge')  + 
+    xlab("Good Loan") + 
+    guides(fill = guide_legend(title = "Credit History"))
+```
+
+<br>
+
+#### 10. Ejercicio:
+
+**1.** Fue terrible poder hacer la gráfica con `ggplot2` utilizando los nombres de
+columnas que pusimos (`german_colnames`).
+Modifica el archivo donde tengas `german_colnames` (puede ser `utils.R` o `metadata.R`) y 
+sustituye (usando quizá `stringr` o `grep`) los `' '` y `'/'` por `'_'` (ve la [guía de 
+estilo](http://adv-r.had.co.nz/Style.html)) y pasa todo a minúsculas.
+
+**2.** Ejecuta todo de nuevo (¡la ventaja de ser reproducible!)
+
+```{r}
+colnames(german_data) <- german_clean_colnames(german_colnames)
+german_data %>% glimpse()
+```

@@ -1,0 +1,93 @@
+---
+title: "Berka"
+output: html_notebook
+---
+
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+instalar <- function(paquete) {
+
+    if (!require(paquete,character.only = TRUE, quietly = TRUE, warn.conflicts = FALSE)) {
+        install.packages(as.character(paquete), dependecies = TRUE, repos = "http://cran.us.r-project.org")
+        library(paquete, character.only = TRUE, quietly = TRUE, warn.conflicts = FALSE)
+    }
+}
+
+paquetes <- c('lubridate', 'magrittr', 'ggvis', 'dplyr', 'tidyr', 'readr', 'rvest', 
+              'ggplot2', 'stringr', 'ggthemes', 'googleVis', 'shiny', 'tibble', 'vcd', 'vcdExtra',
+              'GGally', 'readODS', 'readxl', "RSQLite")
+
+lapply(paquetes, instalar);
+```
+
+
+![Berka dataset](http://lisp.vse.cz/pkdd99/Challenge/data.gif)
+
+
+```{shell eval=FALSE}
+for db in *asc;
+do
+table=${db%.*}s
+if [ "$db" = "trans.asc" ]; then
+table="transactions"
+fi
+echo -e ".separator ';'\n.import ${db} ${table}" | sqlite3 berka.raw 
+done
+```
+
+- Verifica que cada `account` tenga un `owner`
+
+```{sql eval=FALSE}
+select a.account_id, c.client_id, type, count(*) 
+from accounts a, disps d, clients c  -- Inner Join implícito
+on 
+a.account_id = d.account_id 
+and 
+d.client_id = c.client_id 
+group by a.account_id, c.client_id, type 
+order by count(*) desc 
+limit 10;
+```
+
+
+```{r}
+berka_raw <- dplyr::src_sqlite(path="../data/berka/berka.raw")
+dplyr::db_list_tables(con = berka_raw$con)
+```
+
+```{r}
+accounts <- tbl(berka_raw, 'accounts')
+cards <- tbl(berka_raw, 'cards')
+clients <- tbl(berka_raw, 'clients')
+dispositions <- tbl(berka_raw, 'disps')
+districts <- tbl(berka_raw, 'districts')
+loans <- tbl(berka_raw, 'loans')
+orders <- tbl(berka_raw, 'orders')
+transactions <- tbl(berka_raw, 'transactions')
+```
+
+
+```{r}
+transactions
+```
+
+
+```{r}
+berka_db <-  dplyr::src_sqlite(path="../data/berka/berka.db", create = TRUE)
+```
+
+
+```{r}
+clientes <- clients %>%
+    left_join(dispositions, by="client_id") %>%
+    left_join(cards, by="disp_id") %>%
+    left_join(accounts, by="account_id") %>%
+    left_join(transactions, by="account_id") %>%
+    left_join(orders, by="account_id")
+```
+
+
+```{r}
+copy_to(berka_db, df=collect(clientes), name='clients', temporary = FALSE)
+```
+
